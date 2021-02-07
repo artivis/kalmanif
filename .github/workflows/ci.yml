@@ -1,0 +1,248 @@
+name: build-and-test
+on:
+  push:
+    branches:
+      - devel
+      - master
+  pull_request:
+    branches:
+      - devel
+  workflow_dispatch:
+
+env:
+  CTEST_OUTPUT_ON_FAILURE: 1
+
+jobs:
+
+  build-ubuntu:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-18.04, ubuntu-20.04]
+        compiler: [{
+          "cc": "gcc",
+          "cxx": "g++"
+         }, {
+          "cc": "clang",
+          "cxx": "clang++"
+        }]
+    env:
+      CC: ${{ matrix.compiler.cc }}
+      CXX: ${{ matrix.compiler.cxx }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libeigen3-dev gnuplot
+
+      - name: Checkout manif
+        run: |
+          git clone https://github.com/artivis/manif.git ${{runner.workspace}}/manif
+          mkdir ${{runner.workspace}}/build_manif
+      - name: Install manif
+        working-directory: ${{runner.workspace}}/build_manif
+        run: |
+          cmake ${{runner.workspace}}/manif
+          sudo make install
+
+      - name: Setup
+        run: mkdir ${{runner.workspace}}/build
+      - name: Configure
+        working-directory: ${{runner.workspace}}/build
+        run: cmake $GITHUB_WORKSPACE -DBUILD_EXAMPLES=ON -DBUILD_TESTING=ON -DPLOT_EXAMPLES=ON
+      - name: Build
+        working-directory: ${{runner.workspace}}/build
+        run: cmake --build . --config Release
+      - name: Test
+        working-directory: ${{runner.workspace}}/build
+        run: ctest . -C Release
+
+  build-mac:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-10.15] # Xcode 10.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Xcode
+        if: matrix.os == 'macOS-10.15'
+        run: sudo xcode-select -s /Applications/Xcode_10.3.app/Contents/Developer
+
+      - name: Setup
+        run: brew install eigen gnuplot
+
+      - name: Checkout manif
+        run: |
+          git clone https://github.com/artivis/manif.git ${{runner.workspace}}/manif
+          mkdir ${{runner.workspace}}/build_manif
+      - name: Install manif
+        working-directory: ${{runner.workspace}}/build_manif
+        run: |
+          cmake ${{runner.workspace}}/manif
+          sudo make install
+
+      - name: Setup
+        run: mkdir ${{runner.workspace}}/build
+      - name: Configure
+        working-directory: ${{runner.workspace}}/build
+        run: cmake $GITHUB_WORKSPACE -DBUILD_EXAMPLES=ON -DBUILD_TESTING=ON -DPLOT_EXAMPLES=ON
+      - name: Build
+        working-directory: ${{runner.workspace}}/build
+        run: cmake --build . --config Release
+      - name: Test
+        working-directory: ${{runner.workspace}}/build
+        run: ctest . -C Release
+
+  build-win:
+    runs-on: ${{ matrix.combinations.os }}
+    strategy:
+      matrix:
+        combinations: [{
+          "os": "windows-2016",
+          "cmake_generator": "Visual Studio 15 2017"
+         }, {
+          "os": "windows-2019",
+          "cmake_generator": "Visual Studio 16 2019"
+        }]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup
+        run: |
+          vcpkg install eigen3:x64-windows
+          cd ${{runner.workspace}}
+          mkdir build
+      - name: Display config
+        shell: bash
+        run: |
+          echo "OS:" && $RUNNER_OS && echo ""
+          echo "Eigen:" && vcpkg list
+
+      - name: Install manif
+        shell: bash -l {0}
+        run: |
+          cd ${GITHUB_WORKSPACE}
+          git clone https://github.com/artivis/manif.git
+          cd manif && mkdir build && cd build
+          cmake -G"${{ matrix.combinations.cmake_generator }}" -A x64 -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake ..
+          cmake --build . --config Release --target install
+
+      - name: Configure CMake
+        shell: bash
+        working-directory: ${{runner.workspace}}/build
+        run: cmake $GITHUB_WORKSPACE -G"${{ matrix.combinations.cmake_generator }}" -A x64 -DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake -DBUILD_EXAMPLES=ON -DBUILD_TESTING=ON
+      - name: Build
+        working-directory: ${{runner.workspace}}/build
+        run: cmake --build . --config Release
+      - name: Test
+        working-directory: ${{runner.workspace}}/build
+        run: ctest . -C Release
+
+  cppcheck:
+    needs: [build-ubuntu]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libeigen3-dev cppcheck
+
+      - name: Checkout manif
+        run: |
+          git clone https://github.com/artivis/manif.git ${{runner.workspace}}/manif
+          mkdir ${{runner.workspace}}/build_manif
+      - name: Install manif
+        working-directory: ${{runner.workspace}}/build_manif
+        run: |
+          cmake ${{runner.workspace}}/manif
+          sudo make install
+
+      - name: Setup
+        run: mkdir ${{runner.workspace}}/build
+      - name: Configure CMake
+        working-directory: ${{runner.workspace}}/build
+        run: cmake $GITHUB_WORKSPACE -DENABLE_CPPCHECK=ON -DBUILD_EXAMPLES=ON -DBUILD_TESTING=ON
+      - name: Build
+        working-directory: ${{runner.workspace}}/build
+        run: make -j2
+      - name: Test
+        working-directory: ${{runner.workspace}}/build
+        run: make run-cppcheck
+
+  # This currently takes way too much time.
+  # Need to reduce the tests loops
+  # valgrind:
+  #   needs: [build-ubuntu]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v2
+  #     - name: Install dependencies
+  #       run: |
+  #         sudo apt update
+  #         sudo apt install -y libceres-dev valgrind
+
+  #     - name: Checkout manif
+  #       run: |
+  #         git clone https://github.com/artivis/manif.git ${{runner.workspace}}/manif
+  #         mkdir ${{runner.workspace}}/build_manif
+  #     - name: Install manif
+  #       working-directory: ${{runner.workspace}}/build_manif
+  #       run: |
+  #         cmake ${{runner.workspace}}/manif
+  #         sudo make install
+
+  #     - name: Setup
+  #       run: mkdir ${{runner.workspace}}/build
+  #     - name: Configure CMake
+  #       working-directory: ${{runner.workspace}}/build
+  #       run: cmake $GITHUB_WORKSPACE -DENABLE_VALGRIND=ON -DBUILD_TESTING=ON
+  #     - name: Build
+  #       working-directory: ${{runner.workspace}}/build
+  #       run: make -j2
+  #     - name: Test
+  #       working-directory: ${{runner.workspace}}/build
+  #       run: ctest -T memcheck
+
+  codecov:
+    needs: [build-ubuntu]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libeigen3-dev
+
+      - name: Checkout manif
+        run: |
+          git clone https://github.com/artivis/manif.git ${{runner.workspace}}/manif
+          mkdir ${{runner.workspace}}/build_manif
+      - name: Install manif
+        working-directory: ${{runner.workspace}}/build_manif
+        run: |
+          cmake ${{runner.workspace}}/manif
+          sudo make install
+
+      - name: Setup
+        run: mkdir ${{runner.workspace}}/build
+      - name: Configure CMake
+        working-directory: ${{runner.workspace}}/build
+        run: cmake $GITHUB_WORKSPACE -DENABLE_COVERAGE=ON -DBUILD_TESTING=ON
+      - name: Build
+        working-directory: ${{runner.workspace}}/build
+        run: make -j2
+      - name: Test
+        working-directory: ${{runner.workspace}}/build
+        run: make test
+      - name: Upload coverage
+        working-directory: ${{runner.workspace}}/build
+        run: bash <(curl -s https://codecov.io/bash) -R $GITHUB_WORKSPACE

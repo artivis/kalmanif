@@ -1,0 +1,9 @@
+*.user
+.cproject
+.project
+.settings
+.tags*
+build
+docs/html
+*doxygen_warnings.txt
+.vscode
