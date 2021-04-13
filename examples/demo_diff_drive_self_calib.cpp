@@ -1,5 +1,5 @@
 /**
- * \file demo_se2.cpp
+ * \file demo_diff_drive_self_calib.cpp
  *
  *  Created on: Feb 5, 2021
  *     \author: artivis
@@ -18,22 +18,14 @@
  *  ---------------------------------------------------------
  *  Demonstration example:
  *
- *  2D Robot localization based on fixed beacons.
- *
- *  See demo_se3.cpp for the 3D equivalent.
+ *  2D differential drive base localization based on fixed beacons.
  *  ---------------------------------------------------------
  *
- *  This demo corresponds to the application in chapter V, section A,
- *  in the paper Sola-18, [https://arxiv.org/abs/1812.01537].
- *
- *  The following is an abstract of the content of the paper.
- *  Please consult the paper for better reference.
- *
- *
- *  We consider a robot in the plane surrounded by a small
- *  number of punctual landmarks or _beacons_.
- *  The robot receives control actions in the form of axial
- *  and angular velocities, and is able to measure the location
+ *  We consider a differential drive base robot in the plane surrounded
+ *  by a small number of punctual landmarks or _beacons_.
+ *  The robot receives control actions in the form of
+ *  noisy incremental wheel angles (e.g. measured by means of wheel encoders),
+ *  and is able to measure the location
  *  of the beacons w.r.t its own reference frame.
  *
  *  The robot pose X is in SE(2) and the beacon positions b_k in R^2,
@@ -44,22 +36,35 @@
  *
  *      b_k = (bx_k, by_k)           // lmk coordinates in world frame
  *
- *  The control signal u is a twist in se(2) comprising longitudinal
- *  velocity v and angular velocity w, with no lateral velocity
- *  component, integrated over the sampling time dt.
+ *  The control signal u is in R^2.
  *
- *      u = (v*dt, 0, w*dt)
+ *      u = (phi_l, phi_r)
  *
+ *  Where phi_l and phi_r are respectively the incremental left wheel angle
+ *  and the incremental right wheel angle.
  *  The control is corrupted by additive Gaussian noise u_noise,
  *  with covariance
  *
- *    Q = diagonal(sigma_v^2, sigma_s^2, sigma_w^2).
+ *    Q = diagonal(sigma_l^2, sigma_r^2).
  *
- *  This noise accounts for possible lateral slippage u_s
- *  through a non-zero value of sigma_s,
+ *  Assuming constant wheel velocities between times steps,
+ *  motion of the vehicle can be described by a small arc of length dl,
+ *  angle dtheta and radius dl/dtheta.
+ *
+ *    dl = 0.5 * (rl * phi_l + rr * phi_r)
+ *    dtheta = 1 / dw * (rr * phi_r - rl * phi_l)
+ *
+ *  where rl and rr are respectively the left wheel radius and the
+ *  right wheel radius and dw is the distance between both wheels.
+ *
+ *  This arc can be expressed in the tangent or velocity space of SE(2),
+ *
+ *    b = (dl, ds, dtheta)
+ *
+ *  where ds is a zero-mean perturbation accounting for lateral wheel slippage.
  *
  *  At the arrival of a control u, the robot pose is updated
- *  with X <-- X * Exp(u) = X + u.
+ *  with X <-- X * Exp(b) = X + b.
  *
  *  Landmark measurements are of the range and bearing type,
  *  though they are put in Cartesian form for simplicity.
@@ -97,6 +102,11 @@
  *  Printing simulated state and estimated state together
  *  with an unfiltered state (i.e. without Kalman corrections)
  *  allows for evaluating the quality of the estimates.
+ *
+ *  Demo partially based on
+ *  'Joint on-manifold self-calibration of odometry model and
+ *   sensor extrinsics using pre-integration',
+ *  J. Deray, J. Sola and J. Andrade-Cetto, ECMR 2019.
  */
 
 #include <kalmanif/kalmanif.h>
@@ -105,20 +115,32 @@
 #include "utils/plots.h"
 #include "utils/utils.h"
 
+#include <manif/Bundle.h>
 #include <manif/SE2.h>
+#include <manif/Rn.h>
+
+#include <kalmanif/system_models/diff_drive_system_model.h>
+#include <kalmanif/measurement_models/measurement_model_bundle_wrapper.h>
 
 #include <vector>
 
 using namespace kalmanif;
 using namespace manif;
 
-using State = SE2d;
+using Scalar = double;
+using SystemModel = DiffDriveSystemModel<Scalar, WithCalibration::Enabled>;
+using State = SystemModel::State;
+using PoseSubState = State::Element<0>;
 using StateCovariance = Covariance<State>;
-using SystemModel = LieSystemModel<State>;
+using Kinematics = SystemModel::Kinematics;
 using Control = SystemModel::Control;
-using MeasurementModel = Landmark2DMeasurementModel<State>;
+
+using MeasurementModel = Landmark2DMeasurementModel<PoseSubState>;
 using Landmark = MeasurementModel::Landmark;
 using Measurement = MeasurementModel::Measurement;
+
+using Vector6d = Eigen::Matrix<double, 6, 1>;
+using Array6d = Eigen::Array<double, 6, 1>;
 
 using EKF = ExtendedKalmanFilter<State>;
 using SEKF = SquareRootExtendedKalmanFilter<State>;
@@ -132,29 +154,33 @@ int main (int argc, char* argv[]) {
 
   // START CONFIGURATION
 
-  constexpr double dt = 0.01;                 // s
+  constexpr int control_freq = 100;           // Hz
+  constexpr double dt = 1./control_freq;      // s
   double sqrtdt = std::sqrt(dt);
 
-  constexpr double var_gyro = 1e-3;           // (rad/s)^2
-  constexpr double var_wheel_odometry = 9e-5; // (m/s)^2
+  constexpr double var_wheel = 9e-5;          // (rad/s)^2
   constexpr double var_gps = 6e-3;
 
-  constexpr int gps_freq = 10;                // Hz
   constexpr int landmark_freq = 50;           // Hz
+  constexpr int gps_freq = 10;                // Hz
 
-  State X_simulation = State::Identity(),
-        X_unfiltered = State::Identity(); // propagation only, for comparison purposes
+  State X_simulation = State::Identity();
+  X_simulation.element<1>().coeffs()(0) = 1;
+  X_simulation.element<1>().coeffs()(1) = 1;
+  X_simulation.element<1>().coeffs()(2) = 1;
+
+  State X_unfiltered = X_simulation;  // propagation only, for comparison purposes
 
   // Define a control vector and its noise and covariance
   Control             u_simu, u_est, u_unfilt;
 
-  Eigen::Vector3d     u_nom, u_nom_simu, u_noisy, u_noise;
-  Eigen::Array3d      u_sigmas;
-  Eigen::Matrix3d     U;
+  Eigen::Vector2d     u_nom, u_noisy, u_noise;
+  Eigen::Array2d      u_sigmas;
+  Eigen::Matrix2d     U;
 
-  u_nom << 0, 0, 0;
-  u_sigmas << std::sqrt(var_wheel_odometry), std::sqrt(var_wheel_odometry), std::sqrt(var_gyro);
-  U        = (u_sigmas * u_sigmas * 1./dt).matrix().asDiagonal();
+  u_nom    << 0.5, 0.35; // move along an arc
+  u_sigmas << std::sqrt(var_wheel), std::sqrt(var_wheel);
+  U        = (u_sigmas * u_sigmas).matrix().asDiagonal();
 
   // Define the beacon's measurements
   Eigen::Vector2d y, y_noise;
@@ -180,17 +206,25 @@ int main (int argc, char* argv[]) {
 
   std::vector<Measurement> measurements(measurement_models.size());
 
-  SystemModel system_model;
+  Kinematics kinematic(0.15, 0.15, 0.4); // wheels radii and separation
+  SystemModel system_model(kinematic);
   system_model.setCovariance(U);
 
   StateCovariance state_cov_init = StateCovariance::Zero();
-  state_cov_init(0, 0) = 1;
-  state_cov_init(1, 1) = 1;
-  state_cov_init(2, 2) = MANIF_PI_4;
+  state_cov_init(0, 0) = 0.1;
+  state_cov_init(1, 1) = 0.1;
+  state_cov_init(2, 2) = 0.17;
+  state_cov_init(3, 3) = 0.00001;
+  state_cov_init(4, 4) = 0.00001;
+  state_cov_init(5, 5) = 0.00001;
 
-  Eigen::Vector3d n = randn<Eigen::Array3d>();
-  Eigen::Vector3d X_init_coeffs = state_cov_init.cwiseSqrt() * n;
-  State X_init(X_init_coeffs(0), X_init_coeffs(1), X_init_coeffs(2));
+  Vector6d n = randn<Array6d>();
+  Vector6d X_init_coeffs = state_cov_init.cwiseSqrt() * n;
+  X_init_coeffs(3) += 1; X_init_coeffs(4) += 1; X_init_coeffs(5) += 1;
+  State X_init(
+    PoseSubState(X_init_coeffs(0), X_init_coeffs(1), X_init_coeffs(2)),
+    State::Element<1>(X_init_coeffs.tail<3>())
+  );
 
   EKF ekf;
   ekf.setState(X_init);
@@ -203,31 +237,43 @@ int main (int argc, char* argv[]) {
   UKFM ukfm(X_init, state_cov_init);
 
   // Store some data for plots
-  DemoDataCollector<State> collector;
+  DemoDataCollector<PoseSubState> collector;
 
-  // Make T steps. Measure up to K landmarks each time.
-  for (double t = 0; t < 30; t += dt) {
+  // Make 10 steps. Measure up to three landmarks each time.
+  // for (double t = 0; t < 0.1; t += dt) {
+  for (double t = 0; t < 240; t += dt) {
     //// I. Simulation
 
     /// simulate noise
-    u_noise = randn<Eigen::Array3d>(u_sigmas / sqrtdt); // control noise
+    u_noise = randn<Eigen::Array2d>(u_sigmas / sqrtdt); // control noise
     u_noisy = u_nom + u_noise;                          // noisy control
 
     u_simu   = u_nom   * dt;
     u_est    = u_noisy * dt;
     u_unfilt = u_noisy * dt;
 
+    if (t > 120) {
+      // The model changes
+      // e.g. a heavy load is placed on the robot
+      // which squeeze the rubber tires
+      X_simulation.element<1>().coeffs()(0) = 0.85;
+      X_simulation.element<1>().coeffs()(1) = 0.85;
+      X_simulation.element<1>().coeffs()(2) = 1;
+    }
+
     /// first we move - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     X_simulation = system_model(X_simulation, u_simu);
 
-    /// then we measure all landmarks - - - - - - - - - - - - - - - - - - - -
-    for (int i = 0; i < measurement_models.size(); ++i) {
-      auto measurement_model = measurement_models[i];
-
-      y = measurement_model(X_simulation);            // landmark measurement, before adding noise
+    // /// then we measure all landmarks - - - - - - - - - - - - - - - - - - - -
+    for (int i = 0; i < measurement_models.size(); ++i)
+    {
+      // Since the measurement operates on SE2,
+      // we use the 'MeasurementModelBundleWrapper'
+      // to interface it with the SE2 element of the Bundle state
+      y = MeasurementModelBundleWrapper{measurement_models[i]}(X_simulation); // landmark measurement, before adding noise
 
       /// simulate noise
-      y_noise = randn(y_sigmas);                      // measurement noise
+      y_noise = randn(y_sigmas);
 
       y = y + y_noise;                                // landmark measurement, noisy
       measurements[i] = y;                            // store for the estimator just below
@@ -236,7 +282,6 @@ int main (int argc, char* argv[]) {
     //// II. Estimation
 
     /// First we move
-
     ekf.propagate(system_model, u_est);
 
     sekf.propagate(system_model, u_est);
@@ -259,14 +304,13 @@ int main (int argc, char* argv[]) {
         y = measurements[i];
 
         // filter update
-        ekf.update(measurement_model, y);
+        ekf.update(MeasurementModelBundleWrapper{measurement_model}, y);
 
-        sekf.update(measurement_model, y);
+        sekf.update(MeasurementModelBundleWrapper{measurement_model}, y);
 
-        iekf.update(measurement_model, y);
+        iekf.update(MeasurementModelBundleWrapper{measurement_model}, y);
 
-        ukfm.update(measurement_model, y);
-
+        ukfm.update(MeasurementModelBundleWrapper{measurement_model}, y);
       }
     }
 
@@ -274,53 +318,47 @@ int main (int argc, char* argv[]) {
     if (int(t*100) % int(100./gps_freq) == 0) {
 
       // gps measurement model
-      auto gps_measurement_model = DummyGPSMeasurementModel<State>(R_gps);
+      auto gps_measurement_model = DummyGPSMeasurementModel<PoseSubState>(R_gps);
 
-      y_gps = gps_measurement_model(X_simulation);                  // gps measurement, before adding noise
+      y_gps = MeasurementModelBundleWrapper{gps_measurement_model}(X_simulation);                  // gps measurement, before adding noise
 
       /// simulate noise
       y_gps_noise = randn(y_gps_sigmas);                            // measurement noise
       y_gps = y_gps + y_gps_noise;                                  // gps measurement, noisy
 
       // filter update
-      ekf.update(gps_measurement_model, y_gps);
+      ekf.update(MeasurementModelBundleWrapper{gps_measurement_model}, y_gps);
 
-      sekf.update(gps_measurement_model, y_gps);
+      sekf.update(MeasurementModelBundleWrapper{gps_measurement_model}, y_gps);
 
-      iekf.update(gps_measurement_model, y_gps);
+      iekf.update(MeasurementModelBundleWrapper{gps_measurement_model}, y_gps);
 
-      ukfm.update(gps_measurement_model, y_gps);
+      ukfm.update(MeasurementModelBundleWrapper{gps_measurement_model}, y_gps);
     }
 
-    //// III. Next iteration
-
-    u_nom << 0.1 * std::cos(t) + 10.0,
-             0.0,
-             std::exp(-0.03 * (t)) * std::cos(t);
-
-    //// IV. Results
+    //// III. Results
 
     auto X_e = ekf.getState();
     auto X_s = sekf.getState();
     auto X_i = iekf.getState();
     auto X_u = ukfm.getState();
 
-    collector.collect("EKF",  X_simulation, X_e, ekf.getCovariance(), t);
-    collector.collect("SEKF", X_simulation, X_s, sekf.getCovariance(), t);
-    collector.collect("IEKF", X_simulation, X_i, iekf.getCovariance(), t);
-    collector.collect("UKFM", X_simulation, X_u, ukfm.getCovariance(), t);
-    collector.collect("UNFI", X_simulation, X_unfiltered, StateCovariance::Zero(), t);
+    collector.collect("EKF",  X_simulation.element<0>(), X_e.element<0>(), ekf.getCovariance().topLeftCorner<3,3>(), t);
+    collector.collect("SEKF", X_simulation.element<0>(), X_s.element<0>(), sekf.getCovariance().topLeftCorner<3,3>(), t);
+    collector.collect("IEKF", X_simulation.element<0>(), X_i.element<0>(), iekf.getCovariance().topLeftCorner<3,3>(), t);
+    collector.collect("UKFM", X_simulation.element<0>(), X_u.element<0>(), ukfm.getCovariance().topLeftCorner<3,3>(), t);
+    collector.collect("UNFI", X_simulation.element<0>(), X_unfiltered.element<0>(), Covariance<SE2d>::Zero(), t);
 
-    std::cout << "X simulated      : " << X_simulation.log()      << "\n"
-              << "X estimated EKF  : " << X_e.log()
+    std::cout << "X simulated      : " << X_simulation            << "\n"
+              << "X estimated EKF  : " << X_e
               << " : |d|=" << (X_simulation - X_e).weightedNorm() << "\n"
-              << "X estimated SEKF : " << X_s.log()
+              << "X estimated SEKF : " << X_s
               << " : |d|=" << (X_simulation - X_s).weightedNorm() << "\n"
-              << "X estimated IEKF : " << X_i.log()
+              << "X estimated IEKF : " << X_i
               << " : |d|=" << (X_simulation - X_i).weightedNorm() << "\n"
-              << "X estimated UKFM : " << X_u.log()
+              << "X estimated UKFM : " << X_u
               << " : |d|=" << (X_simulation - X_u).weightedNorm() << "\n"
-              << "X unfilterd      : " << X_unfiltered.log()
+              << "X unfilterd      : " << X_unfiltered
               << " : |d|=" << (X_simulation - X_unfiltered).weightedNorm() << "\n"
               << "----------------------------------"                      << "\n";
   }
@@ -328,11 +366,13 @@ int main (int argc, char* argv[]) {
   // END OF TEMPORAL LOOP. DONE.
 
   // Generate some metrics and print them
-  DemoDataProcessor<State>().process(collector).print();
+  DemoDataProcessor<PoseSubState>().process(collector).print();
 
   // Actually plots only if PLOT_EXAMPLES=ON
-  DemoTrajPlotter<State>::plot(collector, filename, plot_trajectory);
-  DemoDataPlotter<State>::plot(collector, filename, plot_error);
+  DemoTrajPlotter<PoseSubState>::plot(collector, filename, plot_trajectory);
+  // DemoDataPlotter<State>::plot(collector, filename, plot_error);
+  (void)plot_trajectory;
+  (void)plot_error;
 
   return EXIT_SUCCESS;
 }

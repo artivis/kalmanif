@@ -19,6 +19,8 @@ if(PLOT_EXAMPLES)
 endif()
 
 add_executable(demo_se2 demo_se2.cpp)
+add_executable(demo_diff_drive demo_diff_drive.cpp)
+add_executable(demo_diff_drive_self_calib demo_diff_drive_self_calib.cpp)
 add_executable(demo_se3 demo_se3.cpp)
 add_executable(demo_se_2_3 demo_se_2_3.cpp)
 
@@ -28,6 +30,8 @@ set(CXX_17_EXAMPLE_TARGETS
 
   # SE2
   demo_se2
+  demo_diff_drive
+  demo_diff_drive_self_calib
 
   # SE3
   demo_se3

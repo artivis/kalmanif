@@ -183,7 +183,7 @@ int main (int argc, char* argv[]) {
   Eigen::Matrix3d R_gps;
 
   y_gps_sigmas << std::sqrt(6e-3), std::sqrt(6e-3), std::sqrt(6e-3);
-  R_gps        = (y_sigmas * y_sigmas).matrix().asDiagonal();
+  R_gps        = (y_gps_sigmas * y_gps_sigmas).matrix().asDiagonal();
 
   SystemModel system_model;
   system_model.setCovariance(U);

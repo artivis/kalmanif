@@ -9,17 +9,11 @@ template <typename _Derived> struct KalmanFilterBase;
 
 /**
  * @brief Abstract base class of all measurement models
- *
- * @param StateType The vector-type of the system state (usually some type derived from kalman::Vector)
- * @param MeasurementType The vector-type of the measurement (usually some type derived from kalman::Vector)
- * @param CovarianceBase The class template used for covariance storage (must be either StandardBase or SquareRootBase)
  */
 template <typename _Derived>
 struct MeasurementModelBase
   : internal::crtp<_Derived>
-  , internal::CovarianceBase<
-      typename internal::traits<_Derived>::Measurement
-    > {
+  , internal::CovarianceBase<typename internal::traits<_Derived>::Measurement> {
 
 protected:
 
@@ -31,9 +25,6 @@ protected:
 
 public:
 
-  //! System state type
-  using State = typename internal::traits<_Derived>::State;
-
   //! System control input type
   using Measurement = typename internal::traits<_Derived>::Measurement;
 
@@ -43,9 +34,9 @@ public:
    * propagates the estimated measurement value
    * given the current state estimate x.
    */
-  template <typename... Args>
-  Measurement operator ()(const State& x, Args&&... args) const {
-    return derived().run(x, std::forward<Args>(args)...);
+  template <typename State, typename... Args>
+  Measurement operator ()(State&& x, Args&&... args) const {
+    return derived().run(std::forward<State>(x), std::forward<Args>(args)...);
   }
 };
 

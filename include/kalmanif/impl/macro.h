@@ -43,6 +43,8 @@ raise(Args&&... args) {
 # endif
 #endif
 
+#define KALMANIF_UNUSED(x) (void)(x)
+
 // gcc expands __VA_ARGS___ before passing it into the macro.
 // Visual Studio expands __VA_ARGS__ after passing it.
 // This macro is a workaround to support both

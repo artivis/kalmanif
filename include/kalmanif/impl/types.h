@@ -3,6 +3,11 @@
 
 namespace kalmanif {
 
+enum class WithCalibration : bool {
+  Enabled = true,
+  Disabled = false
+};
+
 /**
  * @brief An alias for square matrix
  *
