@@ -140,7 +140,7 @@ See the run results [on the dedicated page](docs/demo.md).
 > :heavy_exclamation_mark: Pro tip, if you only want to run the example,
 > or to deploy your application,
 > don't forget to compile in `Release` together with the appropriate optimization flags,
-> e.g. `-DBUILD_TESTING=OFF -DBUILD_EXAMPLES=ON -DPLOT_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Release -DNDEBUG=1 -DCMAKE_CXX_FLAGS="-march=native -O3 -mtune=native -mavx2 -mfma"` to get the most out of it.
+> e.g. `-DBUILD_TESTING=OFF -DBUILD_EXAMPLES=ON -DPLOT_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-march=native -O3 -DNDEBUG -mtune=native -mavx2 -mfma"` to get the most out of it.
 > :heavy_exclamation_mark:
 
 To run the C++ tests, execute the following in the `build` directory,

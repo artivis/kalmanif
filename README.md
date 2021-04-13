@@ -63,6 +63,8 @@ This implements the example V.A in [SOLA-18-Lie][jsola18].
 This re-implements the example above but in 3D.
 - [`demo_se_2_3.cpp`](examples/demo_se_2_3.cpp): 3D robot localization and linear velocity estimation based on strap-down IMU model and fixed beacons.
 
+Check out the documentation to see how to [build them][demo-build] and what are [their options][demo-run].
+
 ## References
 
 `kalmanif` is based on several publications, some of which are referenced [here](docs/publications.md).
@@ -90,9 +92,11 @@ Want to contribute? Great! Check out our [contribution guidelines](CONTRIBUTING.
 [kalmanif-repo]: https://github.com/artivis/kalmanif.git
 [kalmanif-issue]: https://github.com/artivis/kalmanif/issues
 [kalmanif-doc]: https://codedocs.xyz/artivis/kalmanif
+[demo-build]: CONTRIBUTING.md#development-environment
+[demo-run]: docs/demo.md
 
-[manif-repo]: github.com/artivis/manif
-[manif-examples]: github.com/artivis/manif/tree/devel/examples
+[manif-repo]: https://github.com/artivis/manif
+[manif-examples]: https://github.com/artivis/manif/tree/devel/examples
 
 [pybind11]: https://pybind11.readthedocs.io/en/stable/index.html
 
