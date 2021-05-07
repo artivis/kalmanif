@@ -103,7 +103,7 @@ protected:
    */
   template <class MeasurementModelDerived>
   const State& update_impl(
-    Linearized<MeasurementModelBase<MeasurementModelDerived>>& h,
+    const Linearized<MeasurementModelBase<MeasurementModelDerived>>& h,
     const typename internal::traits<MeasurementModelDerived>::Measurement& y
   ) {
     using Measurement =

@@ -21,8 +21,9 @@ struct SquareRootExtendedKalmanFilter
   using typename Base::Scalar;
   using typename Base::State;
   using Base::setState;
-  using CovarianceSqrtBase::setCovariance;
   using Base::getState;
+  using CovarianceSqrtBase::setCovariance;
+  using CovarianceSqrtBase::getCovariance;
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
@@ -66,7 +67,7 @@ protected:
     );
 
     KALMANIF_ASSERT(
-      isCovariance(this->getCovariance()),
+      isCovariance(getCovariance()),
       "SEKF::propagate: Updated matrix P is not a covariance."
     );
 
@@ -84,7 +85,7 @@ protected:
    */
   template <class MeasurementModelDerived>
   const State& update_impl(
-    Linearized<MeasurementModelBase<MeasurementModelDerived>>& h,
+    const Linearized<MeasurementModelBase<MeasurementModelDerived>>& h,
     const typename internal::traits<MeasurementModelDerived>::Measurement& y
   ) {
     using Measurement =
@@ -123,7 +124,7 @@ protected:
     );
 
     KALMANIF_ASSERT(
-      isCovariance(this->getCovariance()),
+      isCovariance(getCovariance()),
       "SEKF::update: Updated matrix P is not a covariance."
     );
 

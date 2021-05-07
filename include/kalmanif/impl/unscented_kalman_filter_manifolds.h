@@ -207,7 +207,7 @@ protected:
    */
   template <class MeasurementModelDerived>
   const State& update_impl(
-    MeasurementModelBase<MeasurementModelDerived>& h,
+    const MeasurementModelBase<MeasurementModelDerived>& h,
     const typename internal::traits<MeasurementModelDerived>::Measurement& y
   ) {
     using Measurement =

@@ -40,7 +40,7 @@ public:
    */
   template<class SystemModelDerived, typename... Args>
   const State& propagate(
-    SystemModelBase<SystemModelDerived>& f,
+    const SystemModelBase<SystemModelDerived>& f,
     const typename internal::traits<SystemModelDerived>::Control& u,
     Args&&... args
   ) {
@@ -57,7 +57,7 @@ public:
    */
   template <class MeasurementModelDerived, typename... Args>
   const State& update(
-    MeasurementModelBase<MeasurementModelDerived>& h,
+    const MeasurementModelBase<MeasurementModelDerived>& h,
     const typename internal::traits<MeasurementModelDerived>::Measurement& y,
     Args&&... args
   ) {
