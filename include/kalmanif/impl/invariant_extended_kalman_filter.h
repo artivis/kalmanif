@@ -89,7 +89,7 @@ protected:
    */
   template <typename MeasurementModelDerived, Invariance MeasIv>
   const State& update_impl(
-    LinearizedInvariant<MeasurementModelBase<MeasurementModelDerived>, MeasIv>& h,
+    const LinearizedInvariant<MeasurementModelBase<MeasurementModelDerived>, MeasIv>& h,
     const typename internal::traits<MeasurementModelDerived>::Measurement& y
   ) {
     using Measurement =
