@@ -11,7 +11,7 @@ namespace kalmanif {
  *
  * @see Invariance
  */
-template <typename Derived, Invariance Iv> struct LinearizedInvariant;
+template <typename> struct LinearizedInvariant;
 
 /**
  * @brief Specialization for linearized invariant system models
@@ -21,8 +21,8 @@ template <typename Derived, Invariance Iv> struct LinearizedInvariant;
  *
  * @see Invariance
  */
-template <typename Derived, Invariance Iv>
-struct LinearizedInvariant<SystemModelBase<Derived>, Iv> {
+template <typename Derived>
+struct LinearizedInvariant<SystemModelBase<Derived>> {
 private:
 
   inline const Derived &derived() const & noexcept {
@@ -30,8 +30,6 @@ private:
   }
 
 public:
-
-  static constexpr Invariance ModelInvariance = Iv;
 
   template <typename... Args>
   auto operator ()(Args&&... args) const {
@@ -51,8 +49,8 @@ public:
  *
  * @see Invariance
  */
-template <typename Derived, Invariance Iv>
-struct LinearizedInvariant<MeasurementModelBase<Derived>, Iv> {
+template <typename Derived>
+struct LinearizedInvariant<MeasurementModelBase<Derived>> {
 private:
 
   inline const Derived &derived() const & noexcept {
@@ -61,7 +59,8 @@ private:
 
 public:
 
-  static constexpr Invariance ModelInvariance = Iv;
+  static constexpr Invariance ModelInvariance =
+    internal::traits<Derived>::invariance;
 
   template <typename... Args>
   auto operator ()(Args&&... args) const {

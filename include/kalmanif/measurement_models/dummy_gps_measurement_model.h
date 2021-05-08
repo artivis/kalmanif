@@ -7,9 +7,7 @@ template <typename _State>
 struct DummyGPSMeasurementModel
   : MeasurementModelBase<DummyGPSMeasurementModel<_State>>
   , Linearized<MeasurementModelBase<DummyGPSMeasurementModel<_State>>>
-  , LinearizedInvariant<
-      MeasurementModelBase<DummyGPSMeasurementModel<_State>>, Invariance::Left
-    > {
+  , LinearizedInvariant<MeasurementModelBase<DummyGPSMeasurementModel<_State>>> {
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
@@ -65,6 +63,7 @@ struct traits<DummyGPSMeasurementModel<StateType>> {
   using State = StateType;
   using Scalar = typename State::Scalar;
   using Measurement = Eigen::Matrix<Scalar, State::Dim, 1>;
+  static constexpr Invariance invariance = Invariance::Left;
 };
 
 } // namespace internal

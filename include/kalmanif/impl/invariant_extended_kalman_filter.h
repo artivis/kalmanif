@@ -48,9 +48,9 @@ protected:
 
   friend Base;
 
-  template <class SystemModelDerived, Invariance SysIv>
+  template <class SystemModelDerived>
   const State& propagate_impl(
-    const LinearizedInvariant<SystemModelBase<SystemModelDerived>, SysIv>& f,
+    const LinearizedInvariant<SystemModelBase<SystemModelDerived>>& f,
     const typename internal::traits<SystemModelDerived>::Control& u,
     Scalar dt = 1
   ) {
@@ -87,9 +87,9 @@ protected:
    * @param [in] z The measurement vector
    * @return The updated state estimate
    */
-  template <typename MeasurementModelDerived, Invariance MeasIv>
+  template <typename MeasurementModelDerived>
   const State& update_impl(
-    const LinearizedInvariant<MeasurementModelBase<MeasurementModelDerived>, MeasIv>& h,
+    const LinearizedInvariant<MeasurementModelBase<MeasurementModelDerived>>& h,
     const typename internal::traits<MeasurementModelDerived>::Measurement& y
   ) {
     using Measurement =
@@ -103,7 +103,7 @@ protected:
     Measurement e = h(x, H, M);
 
     const Covariance<State>& Ptmp = [&]() {
-      if constexpr (MeasIv == Invariance::Right) {
+      if constexpr (MeasurementModelDerived::ModelInvariance == Invariance::Right) {
         return P;
       } else {
         // Map covariance to Left invariant (from Right thus)
@@ -124,7 +124,7 @@ protected:
     Tangent dx(-(K * (M * (y - e))));
 
     // Update state using correction
-    if constexpr (MeasIv == Invariance::Right) {
+    if constexpr (MeasurementModelDerived::ModelInvariance == Invariance::Right) {
       x = dx + x; // Right invariant: Exp(-dx) * x
     } else {
       x = x + dx; // Left invariant: x * Exp(-dx)
@@ -135,7 +135,7 @@ protected:
     // Update covariance
     // Use the 'Joseph' equation which is numerically more stable
     // P = (I - K.H).P.(I - K.H)^T + K.R.K^T
-    if constexpr (MeasIv == Invariance::Right){
+    if constexpr (MeasurementModelDerived::ModelInvariance == Invariance::Right){
       P = IKH * Ptmp * IKH.transpose();
       P.noalias() += K * MRMt * K.transpose();
     } else {
