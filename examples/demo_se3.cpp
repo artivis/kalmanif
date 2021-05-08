@@ -188,9 +188,8 @@ int main (int argc, char* argv[]) {
   SystemModel system_model;
   system_model.setCovariance(U);
 
-  StateCovariance init_state_cov;
-  init_state_cov.topLeftCorner<3,3>() = Eigen::Matrix3d::Identity();
-  init_state_cov.bottomRightCorner<3,3>() = Eigen::Matrix3d::Identity() * MANIF_PI_4;
+  StateCovariance init_state_cov = StateCovariance::Identity();
+  init_state_cov.bottomRightCorner<3,3>() *= MANIF_PI_4;
 
   Vector6d n = randn<Array6d>();
   Vector6d X_init_noise = init_state_cov.cwiseSqrt() * n;
