@@ -6,6 +6,8 @@
 #include "kalmanif/invariant_extended_kalman_filter.h"
 #include "kalmanif/unscented_kalman_filter_manifolds.h"
 
+#include "kalmanif/rauch_tung_striebel_smoother.h"
+
 #include "kalmanif/measurement_models/landmark_measurement_model.h"
 #include "kalmanif/measurement_models/dummy_gps_measurement_model.h"
 

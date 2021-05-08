@@ -13,12 +13,15 @@
 targeted at robotics applications.
 It is developed as a header-only C++17 library based on [manif][manif-repo].
 
-At the moment, it implements the filters:
+At the moment, it implements:
 
 - Extended Kalman Filter (EKF)
 - Square Root Extended Kalman Filter (SEKF)
 - Invariant Extended Kalman Filter (IEKF)
 - Unscented Kalman Filter on manifolds (UKFM)
+- Rauch-Tung-Striebel Smoother*
+
+(*the RTS Smoother is compatible with all filters (ERTS/SERTS/IERTS/URTS-M))
 
 Together with a few system and measurement models mostly for demo purpose.
 Other filters/models can and will be added, contributions are welcome.

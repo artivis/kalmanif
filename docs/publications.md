@@ -58,9 +58,44 @@ Both `kalmanif` and **manif** often refer to the following [paper][jsola18]:
   doi={10.1109/ICRA40945.2020.9197489}}
 ```
 
+`kalmanif` implements the [Invariant Rauch-Tung-Stribel Smoother][laan20] (IERTS) described in:
+
+```latex
+@article{Laan-RAL-20,
+  author={van der Laan, Niels and Cohen, Mitchell and Arsenault, Jonathan and Forbes, James Richard},
+  journal={IEEE Robotics and Automation Letters},
+  title={The Invariant Rauch-Tung-Striebel Smoother},
+  year={2020},
+  volume={5},
+  number={4},
+  pages={5067-5074},
+  doi={10.1109/LRA.2020.3005132}}
+```
+
+`kalmanif` implements the 'Unscented Rauch-Tung-Stribel Smoother on Manifold' (URTS-M) based on:
+
+- the aforementioned [Unscented Kalman Filter on Manifolds][brossard20]
+- the aforementioned [Invariant Rauch-Tung-Stribel Smoother][laan20]
+- and [Bayesian Filtering and Smoothing][sarkka13] Sec. 9.3
+
+```latex
+@book{sarkka_2013,
+  place={Cambridge},
+  series={Institute of Mathematical Statistics Textbooks},
+  title={Bayesian Filtering and Smoothing},
+  DOI={10.1017/CBO9781139344203},
+  publisher={Cambridge University Press},
+  author={S{\"a}rkk{\"a}, Simo},
+  collection={Institute of Mathematical Statistics Textbooks},
+  number={3},
+  year={2013}}
+```
+
 [//]: # (URLs)
 
 [jsola18]: http://arxiv.org/abs/1812.01537
 [deray20]: https://joss.theoj.org/papers/10.21105/joss.01371
 [brossard20]: https://arxiv.org/pdf/2002.00878.pdf
 [Barrau17]: https://arxiv.org/pdf/1410.1465.pdf
+[laan20]: https://ras.papercept.net/proceedings/IROS20/2526.pdf
+[sarkka13]: https://www.cambridge.org/core/books/bayesian-filtering-and-smoothing/C372FB31C5D9A100F8476C1B23721A67

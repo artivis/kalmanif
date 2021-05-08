@@ -120,10 +120,17 @@ using MeasurementModel = Landmark2DMeasurementModel<State>;
 using Landmark = MeasurementModel::Landmark;
 using Measurement = MeasurementModel::Measurement;
 
+// Filters
 using EKF = ExtendedKalmanFilter<State>;
 using SEKF = SquareRootExtendedKalmanFilter<State>;
 using IEKF = InvariantExtendedKalmanFilter<State>;
 using UKFM = UnscentedKalmanFilterManifolds<State>;
+
+// Smoothers
+using ERTS = RauchTungStriebelSmoother<EKF>;
+using SERTS = RauchTungStriebelSmoother<SEKF>;
+using IERTS = RauchTungStriebelSmoother<IEKF>;
+using URTSM = RauchTungStriebelSmoother<UKFM>;
 
 int main (int argc, char* argv[]) {
 
@@ -139,8 +146,8 @@ int main (int argc, char* argv[]) {
   constexpr double var_wheel_odometry = 9e-5; // (m/s)^2
   constexpr double var_gps = 6e-3;
 
-  constexpr int gps_freq = 10;                // Hz
-  constexpr int landmark_freq = 50;           // Hz
+  // constexpr int gps_freq = 10;                // Hz
+  // constexpr int landmark_freq = 50;           // Hz
 
   State X_simulation = State::Identity(),
         X_unfiltered = State::Identity(); // propagation only, for comparison purposes
@@ -165,8 +172,8 @@ int main (int argc, char* argv[]) {
   R        = (y_sigmas * y_sigmas).matrix().asDiagonal();
 
   std::vector<MeasurementModel> measurement_models = {
-    MeasurementModel(Landmark(2.0,  0.0), R),
-    MeasurementModel(Landmark(2.0,  1.0), R),
+    // MeasurementModel(Landmark(2.0,  0.0), R),
+    // MeasurementModel(Landmark(2.0,  1.0), R),
     MeasurementModel(Landmark(2.0, -1.0), R)
   };
 
@@ -192,6 +199,8 @@ int main (int argc, char* argv[]) {
   Eigen::Vector3d X_init_coeffs = state_cov_init.cwiseSqrt() * n;
   State X_init(X_init_coeffs(0), X_init_coeffs(1), X_init_coeffs(2));
 
+  // X_unfiltered = X_init;
+
   EKF ekf;
   ekf.setState(X_init);
   ekf.setCovariance(state_cov_init);
@@ -202,8 +211,18 @@ int main (int argc, char* argv[]) {
 
   UKFM ukfm(X_init, state_cov_init);
 
+  ERTS erts(X_init, state_cov_init);
+
+  SERTS serts(X_init, state_cov_init);
+
+  IERTS ierts(X_init, state_cov_init);
+
+  URTSM urtsm(X_init, state_cov_init);
+
   // Store some data for plots
   DemoDataCollector<State> collector;
+  std::vector<State, Eigen::aligned_allocator<State>> Xs_simulation;
+  Xs_simulation.reserve(30./dt);
 
   // Make T steps. Measure up to K landmarks each time.
   for (double t = 0; t < 30; t += dt) {
@@ -219,6 +238,8 @@ int main (int argc, char* argv[]) {
 
     /// first we move - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     X_simulation = system_model(X_simulation, u_simu);
+
+    Xs_simulation.push_back(X_simulation);
 
     /// then we measure all landmarks - - - - - - - - - - - - - - - - - - - -
     for (int i = 0; i < measurement_models.size(); ++i) {
@@ -245,33 +266,42 @@ int main (int argc, char* argv[]) {
 
     ukfm.propagate(system_model, u_est);
 
+    erts.propagate(system_model, u_est);
+
+    serts.propagate(system_model, u_est);
+
+    ierts.propagate(system_model, u_est, dt);
+
+    urtsm.propagate(system_model, u_est);
+
     X_unfiltered = system_model(X_unfiltered, u_unfilt);
 
     /// Then we correct using the measurements of each lmk
 
-    if (int(t*100) % int(100./landmark_freq) == 0) {
-      for (int i = 0; i < measurement_models.size(); ++i) {
+    // if (int(t*100) % int(100./landmark_freq) == 0) {
+    //   for (int i = 0; i < measurement_models.size(); ++i) {
 
-        // landmark
-        auto measurement_model = measurement_models[i];
+    //     // landmark
+    //     auto measurement_model = measurement_models[i];
 
-        // measurement
-        y = measurements[i];
+    //     // measurement
+    //     y = measurements[i];
 
-        // filter update
-        ekf.update(measurement_model, y);
+    //     // filter update
+    //     ekf.update(measurement_model, y);
 
-        sekf.update(measurement_model, y);
+    //     sekf.update(measurement_model, y);
 
-        iekf.update(measurement_model, y);
+    //     iekf.update(measurement_model, y);
 
-        ukfm.update(measurement_model, y);
+    //     ukfm.update(measurement_model, y);
 
-      }
-    }
+    //     ierts.update(measurement_model, y);
+    //   }
+    // }
 
     // GPS measurement update
-    if (int(t*100) % int(100./gps_freq) == 0) {
+    // if (int(t*100) % int(100./gps_freq) == 0) {
 
       // gps measurement model
       auto gps_measurement_model = DummyGPSMeasurementModel<State>(R_gps);
@@ -290,7 +320,15 @@ int main (int argc, char* argv[]) {
       iekf.update(gps_measurement_model, y_gps);
 
       ukfm.update(gps_measurement_model, y_gps);
-    }
+
+      erts.update(gps_measurement_model, y_gps);
+
+      serts.update(gps_measurement_model, y_gps);
+
+      ierts.update(gps_measurement_model, y_gps);
+
+      urtsm.update(gps_measurement_model, y_gps);
+    // }
 
     //// III. Next iteration
 
@@ -325,7 +363,34 @@ int main (int argc, char* argv[]) {
               << "----------------------------------"                      << "\n";
   }
 
-  // END OF TEMPORAL LOOP. DONE.
+  // END OF TEMPORAL LOOP, forward pass
+
+  // Batch backward pass
+  {
+    erts.smooth();
+    const auto& Xs_erts = erts.getStates();
+    const auto& Ps_erts = erts.getCovariances();
+
+    serts.smooth();
+    const auto& Xs_serts = serts.getStates();
+    const auto& Ps_serts = serts.getCovariances();
+
+    ierts.smooth();
+    const auto& Xs_ierts = ierts.getStates();
+    const auto& Ps_ierts = ierts.getCovariances();
+
+    urtsm.smooth();
+    const auto& Xs_urtsm = urtsm.getStates();
+    const auto& Ps_urtsm = urtsm.getCovariances();
+
+    double t=0;
+    for (std::size_t i=0; i<Xs_ierts.size(); ++i, t+=dt) {
+      collector.collect("ERTS", Xs_simulation[i], Xs_erts[i], Ps_erts[i], t);
+      collector.collect("SERTS", Xs_simulation[i], Xs_serts[i], Ps_serts[i], t);
+      collector.collect("IERTS", Xs_simulation[i], Xs_ierts[i], Ps_ierts[i], t);
+      collector.collect("URTSM", Xs_simulation[i], Xs_urtsm[i], Ps_urtsm[i], t);
+    }
+  }
 
   // Generate some metrics and print them
   DemoDataProcessor<State>().process(collector).print();

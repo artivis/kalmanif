@@ -5,6 +5,7 @@ namespace kalmanif {
 
 // Forward declaration
 template <typename Derived> struct SystemModelBase;
+template <typename Filter> struct RauchTungStriebelSmoother;
 
 template <typename StateType, Invariance Iv = Invariance::Right>
 struct InvariantExtendedKalmanFilter
@@ -47,6 +48,14 @@ protected:
   using CovarianceBase::P;
 
   friend Base;
+  friend RauchTungStriebelSmoother<InvariantExtendedKalmanFilter<StateType, Iv>>;
+
+  Jacobian<State, State> A_ = Jacobian<State, State>::Zero();
+
+  // @todo this definitely is an inelegant workaround
+  const Jacobian<State, State>& getA() const {
+    return A_;
+  }
 
   template <class SystemModelDerived>
   const State& propagate_impl(
@@ -68,6 +77,8 @@ protected:
     // propagate covariance
     P = F * P * F.transpose();
     P.noalias() += W * f.getCovariance() * W.transpose();
+
+    A_ = F;
 
     // enforceCovariance(P);
 
