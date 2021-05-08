@@ -13,9 +13,7 @@ template <class StateType>
 struct LieSystemModel final
     : SystemModelBase<LieSystemModel<StateType>>
     , Linearized<SystemModelBase<LieSystemModel<StateType>>>
-    , LinearizedInvariant<
-        SystemModelBase<LieSystemModel<StateType>>, Invariance::Right
-      > {
+    , LinearizedInvariant<SystemModelBase<LieSystemModel<StateType>>> {
 
   //! System model base
   using Base = SystemModelBase<LieSystemModel<StateType>>;

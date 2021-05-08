@@ -54,10 +54,15 @@ compute_sigma_weights(
 // Forward declaration
 template <typename Derived> struct SystemModelBase;
 
-template <typename StateType>
+template <typename StateType, Invariance Iv = Invariance::Right>
 struct UnscentedKalmanFilterManifolds
   : public internal::KalmanFilterBase<UnscentedKalmanFilterManifolds<StateType>>
   , public internal::CovarianceBase<StateType> {
+
+  static_assert(
+    Iv == Invariance::Right,
+    "UKFM: Only Right invariance supported at the moment."
+  );
 
   using Base = internal::KalmanFilterBase<
     UnscentedKalmanFilterManifolds<StateType>
@@ -142,16 +147,29 @@ protected:
     State s_j_p, s_j_m;
     Eigen::Matrix<Scalar, StateSize, StateSize*2> xis_new;
     for (int i = 0; i < StateSize; ++i) {
-      s_j_p = x + MapTangent(xis.col(i).data());
-      s_j_m = x + Tangent(-xis.col(i));
+      if constexpr (Iv == Invariance::Right) {
+        s_j_p = MapTangent(xis.col(i).data()) + x;
+        s_j_m = Tangent(-xis.col(i)) + x;
 
-      xis_new.col(i) = x_new.lminus(
-        f(s_j_p, u, std::forward<Args>(args)...)
-      ).coeffs();
+        xis_new.col(i) = x_new.lminus(
+          f(s_j_p, u, std::forward<Args>(args)...)
+        ).coeffs();
 
-      xis_new.col(i + StateSize) = x_new.lminus(
-        f(s_j_m, u, std::forward<Args>(args)...)
-      ).coeffs();
+        xis_new.col(i + StateSize) = x_new.lminus(
+          f(s_j_m, u, std::forward<Args>(args)...)
+        ).coeffs();
+      } else {
+        s_j_p = x + MapTangent(xis.col(i).data());
+        s_j_m = x + Tangent(-xis.col(i));
+
+        xis_new.col(i) = x_new.rminus(
+          f(s_j_p, u, std::forward<Args>(args)...)
+        ).coeffs();
+
+        xis_new.col(i + StateSize) = x_new.rminus(
+          f(s_j_m, u, std::forward<Args>(args)...)
+        ).coeffs();
+      }
     }
 
     // compute covariance
@@ -166,13 +184,23 @@ protected:
     for (int i = 0; i < NoiseSize; ++i) {
       w_p.noalias() = w_q.sqrt_d_lambda * Uchol.col(i);
 
-      xis_new2.col(i) = x_new.lminus(
-        f(x, u + w_p, std::forward<Args>(args)...)
-      ).coeffs();
+      if constexpr (Iv == Invariance::Right) {
+        xis_new2.col(i) = x_new.lminus(
+          f(x, u + w_p, std::forward<Args>(args)...)
+        ).coeffs();
 
-      xis_new2.col(i + NoiseSize) = x_new.lminus(
-        f(x, u - w_p, std::forward<Args>(args)...)
-      ).coeffs();
+        xis_new2.col(i + NoiseSize) = x_new.lminus(
+          f(x, u - w_p, std::forward<Args>(args)...)
+        ).coeffs();
+      } else {
+        xis_new2.col(i) = x_new.rminus(
+          f(x, u + w_p, std::forward<Args>(args)...)
+        ).coeffs();
+
+        xis_new2.col(i + NoiseSize) = x_new.rminus(
+          f(x, u - w_p, std::forward<Args>(args)...)
+        ).coeffs();
+      }
     }
 
     VectorDoF xi_mean2 = w_q.wj * xis_new2.rowwise().sum();
@@ -227,14 +255,29 @@ protected:
       "UKFM::update: Matrix P is not positive definite."
     );
 
+    const Covariance<State>& Ptmp = [&]() {
+      if constexpr (MeasurementModelDerived::ModelInvariance == Invariance::Right) {
+        return P;
+      } else {
+        // Map covariance to Left invariant (from Right thus)
+        auto AdXinv = x.inverse().adj();
+        return (AdXinv * P * AdXinv.transpose()).eval();
+      }
+    }();
+
     // set sigma points
-    MatrixDoF xis = w_u.sqrt_d_lambda * P.llt().matrixL().toDenseMatrix();
+    MatrixDoF xis = w_u.sqrt_d_lambda * Ptmp.llt().matrixL().toDenseMatrix();
 
     // compute measurement sigma points
     Eigen::Matrix<Scalar, MeasSize, 2 * DoF> yj;
     for (int i = 0; i < DoF; ++i) {
-      yj.col(i) = h( x + MapTangent(xis.col(i).data()));
-      yj.col(i + DoF) = h( x + Tangent(-xis.col(i)));
+      if constexpr (MeasurementModelDerived::ModelInvariance == Invariance::Right) {
+        yj.col(i) = h( MapTangent(xis.col(i).data()) + x );
+        yj.col(i + DoF) = h( Tangent(-xis.col(i)) + x );
+      } else {
+        yj.col(i) = h( x + MapTangent(xis.col(i).data()) );
+        yj.col(i + DoF) = h( x + Tangent(-xis.col(i)) );
+      }
     }
 
     // measurement mean
@@ -260,10 +303,22 @@ protected:
       P_yy.colPivHouseholderQr().solve(w_u.wj * yj * xij).transpose();
 
     // Update state using computed kalman gain and innovation
-    x += MapTangent((K * (y - y_bar)).eval().data());
+    if constexpr (MeasurementModelDerived::ModelInvariance == Invariance::Right) {
+      x = Tangent((K * (y - y_bar))) + x;
+    } else {
+      x = x + Tangent((K * (y - y_bar)));
+    }
 
     // Update covariance
-    P.noalias() -= K * P_yy * K.transpose();
+    P.noalias() -= [&]() {
+      if constexpr (MeasurementModelDerived::ModelInvariance == Invariance::Right) {
+        return (K * P_yy * K.transpose()).eval();
+      } else {
+        // Map covariance to Left invariant (from Right thus)
+        auto AdX = x.adj();
+        return (AdX * K * P_yy * K.transpose() * AdX.transpose()).eval();
+      }
+    }();
 
     enforceCovariance(P);
 

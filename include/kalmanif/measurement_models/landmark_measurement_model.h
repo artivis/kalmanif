@@ -8,7 +8,7 @@ struct LandmarkMeasurementModel
   : MeasurementModelBase<LandmarkMeasurementModel<_State, Dim>>
   , Linearized<MeasurementModelBase<LandmarkMeasurementModel<_State, Dim>>>
   , LinearizedInvariant<
-      MeasurementModelBase<LandmarkMeasurementModel<_State, Dim>>, Invariance::Right
+      MeasurementModelBase<LandmarkMeasurementModel<_State, Dim>>
     > {
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -97,6 +97,7 @@ struct traits<LandmarkMeasurementModel<StateType, Dim>> {
   using State = StateType;
   using Scalar = typename State::Scalar;
   using Measurement = Eigen::Matrix<Scalar, Dim, 1>;
+  static constexpr Invariance invariance = Invariance::Right;
 };
 
 } // namespace internal

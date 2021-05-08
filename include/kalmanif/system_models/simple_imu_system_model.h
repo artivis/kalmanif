@@ -16,9 +16,7 @@ template <typename Scalar>
 struct SimpleImuSystemModel final
   : SystemModelBase<SimpleImuSystemModel<Scalar>>
   , Linearized<SystemModelBase<SimpleImuSystemModel<Scalar>>>
-  , LinearizedInvariant<
-      SystemModelBase<SimpleImuSystemModel<Scalar>>, Invariance::Right
-    > {
+  , LinearizedInvariant<SystemModelBase<SimpleImuSystemModel<Scalar>>> {
 
   //! System model base
   using Base = SystemModelBase<SimpleImuSystemModel<Scalar>>;
