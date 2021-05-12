@@ -36,6 +36,7 @@ set(CXX_17_EXAMPLE_TARGETS
   demo_se_2_3
 )
 
+set(run_all_demo_cmds)
 foreach(target ${CXX_17_EXAMPLE_TARGETS})
   # Link to kalmanif
   target_link_libraries(${target} ${PROJECT_NAME})
@@ -45,10 +46,6 @@ foreach(target ${CXX_17_EXAMPLE_TARGETS})
     target_compile_options(${target} PRIVATE
       -Werror=all
       -Werror=extra
-      -Wno-unknown-pragmas
-      -Wno-sign-compare
-      -Wno-unused-parameter
-      -Wno-missing-field-initializers
     )
   endif()
 
@@ -67,7 +64,12 @@ foreach(target ${CXX_17_EXAMPLE_TARGETS})
     # Link to sciplot
     target_link_sciplot(${target})
   endif()
+
+  list(APPEND run_demo_cmds COMMAND $<TARGET_FILE:${target}> -q)
 endforeach()
+
+add_custom_target(run_demo ${run_demo_cmds} COMMENT "Runs all demo")
+add_dependencies(run_demo ${CXX_17_EXAMPLE_TARGETS})
 
 # Set required C++17 flag
 set_property(TARGET ${CXX_17_EXAMPLE_TARGETS} PROPERTY CXX_STANDARD 17)
