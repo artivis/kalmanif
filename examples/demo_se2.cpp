@@ -139,6 +139,7 @@ int main (int argc, char* argv[]) {
 
   // START CONFIGURATION
 
+  constexpr double eot = 30;                  // s
   constexpr double dt = 0.01;                 // s
   double sqrtdt = std::sqrt(dt);
 
@@ -146,8 +147,10 @@ int main (int argc, char* argv[]) {
   constexpr double var_wheel_odometry = 9e-5; // (m/s)^2
   constexpr double var_gps = 6e-3;
 
-  // constexpr int gps_freq = 10;                // Hz
-  // constexpr int landmark_freq = 50;           // Hz
+  constexpr int gps_freq = 10;                // Hz
+  constexpr int landmark_freq = 50;           // Hz
+  (void)landmark_freq;
+  (void)gps_freq;
 
   State X_simulation = State::Identity(),
         X_unfiltered = State::Identity(); // propagation only, for comparison purposes
@@ -172,8 +175,8 @@ int main (int argc, char* argv[]) {
   R        = (y_sigmas * y_sigmas).matrix().asDiagonal();
 
   std::vector<MeasurementModel> measurement_models = {
-    // MeasurementModel(Landmark(2.0,  0.0), R),
-    // MeasurementModel(Landmark(2.0,  1.0), R),
+    MeasurementModel(Landmark(2.0,  0.0), R),
+    MeasurementModel(Landmark(2.0,  1.0), R),
     MeasurementModel(Landmark(2.0, -1.0), R)
   };
 
@@ -221,11 +224,12 @@ int main (int argc, char* argv[]) {
 
   // Store some data for plots
   DemoDataCollector<State> collector;
-  std::vector<State, Eigen::aligned_allocator<State>> Xs_simulation;
-  Xs_simulation.reserve(30./dt);
+  collector.reserve(
+    eot/dt, "UNFI", "EKF", "SEKF", "IEKF", "UKFM", "ERTS", "SERTS", "IERTS", "URTSM"
+  );
 
   // Make T steps. Measure up to K landmarks each time.
-  for (double t = 0; t < 30; t += dt) {
+  for (double t = 0; t < eot; t += dt) {
     //// I. Simulation
 
     /// simulate noise
@@ -239,10 +243,8 @@ int main (int argc, char* argv[]) {
     /// first we move - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     X_simulation = system_model(X_simulation, u_simu);
 
-    Xs_simulation.push_back(X_simulation);
-
     /// then we measure all landmarks - - - - - - - - - - - - - - - - - - - -
-    for (int i = 0; i < measurement_models.size(); ++i) {
+    for (std::size_t i = 0; i < measurement_models.size(); ++i) {
       auto measurement_model = measurement_models[i];
 
       y = measurement_model(X_simulation);            // landmark measurement, before adding noise
@@ -279,28 +281,34 @@ int main (int argc, char* argv[]) {
     /// Then we correct using the measurements of each lmk
 
     // if (int(t*100) % int(100./landmark_freq) == 0) {
-    //   for (int i = 0; i < measurement_models.size(); ++i) {
+      // for (std::size_t i = 0; i < measurement_models.size(); ++i) {
 
-    //     // landmark
-    //     auto measurement_model = measurement_models[i];
+      //   // landmark
+      //   auto measurement_model = measurement_models[i];
 
-    //     // measurement
-    //     y = measurements[i];
+      //   // measurement
+      //   y = measurements[i];
 
-    //     // filter update
-    //     ekf.update(measurement_model, y);
+      //   // filter update
+        // ekf.update(measurement_model, y);
 
-    //     sekf.update(measurement_model, y);
+        // sekf.update(measurement_model, y);
 
-    //     iekf.update(measurement_model, y);
+        // iekf.update(measurement_model, y);
 
-    //     ukfm.update(measurement_model, y);
+        // ukfm.update(measurement_model, y);
 
-    //     ierts.update(measurement_model, y);
-    //   }
+        // erts.update(measurement_model, y);
+
+        // serts.update(measurement_model, y);
+
+        // ierts.update(measurement_model, y);
+
+        // urtsm.update(measurement_model, y);
+      // }
     // }
 
-    // GPS measurement update
+    // // GPS measurement update
     // if (int(t*100) % int(100./gps_freq) == 0) {
 
       // gps measurement model
@@ -338,34 +346,19 @@ int main (int argc, char* argv[]) {
 
     //// IV. Results
 
-    auto X_e = ekf.getState();
-    auto X_s = sekf.getState();
-    auto X_i = iekf.getState();
-    auto X_u = ukfm.getState();
+    collector.collect(X_simulation, t);
 
-    collector.collect("EKF",  X_simulation, X_e, ekf.getCovariance(), t);
-    collector.collect("SEKF", X_simulation, X_s, sekf.getCovariance(), t);
-    collector.collect("IEKF", X_simulation, X_i, iekf.getCovariance(), t);
-    collector.collect("UKFM", X_simulation, X_u, ukfm.getCovariance(), t);
-    collector.collect("UNFI", X_simulation, X_unfiltered, StateCovariance::Zero(), t);
+    collector.collect("UNFI", X_unfiltered, StateCovariance::Zero(), t);
 
-    std::cout << "X simulated      : " << X_simulation.log()      << "\n"
-              << "X estimated EKF  : " << X_e.log()
-              << " : |d|=" << (X_simulation - X_e).weightedNorm() << "\n"
-              << "X estimated SEKF : " << X_s.log()
-              << " : |d|=" << (X_simulation - X_s).weightedNorm() << "\n"
-              << "X estimated IEKF : " << X_i.log()
-              << " : |d|=" << (X_simulation - X_i).weightedNorm() << "\n"
-              << "X estimated UKFM : " << X_u.log()
-              << " : |d|=" << (X_simulation - X_u).weightedNorm() << "\n"
-              << "X unfilterd      : " << X_unfiltered.log()
-              << " : |d|=" << (X_simulation - X_unfiltered).weightedNorm() << "\n"
-              << "----------------------------------"                      << "\n";
+    collector.collect("EKF",  ekf.getState(), ekf.getCovariance(), t);
+    collector.collect("SEKF", sekf.getState(), sekf.getCovariance(), t);
+    collector.collect("IEKF", iekf.getState(), iekf.getCovariance(), t);
+    collector.collect("UKFM", ukfm.getState(), ukfm.getCovariance(), t);
   }
 
   // END OF TEMPORAL LOOP, forward pass
 
-  // Batch backward pass
+  // Batch backward pass - smoothing
   {
     erts.smooth();
     const auto& Xs_erts = erts.getStates();
@@ -384,12 +377,17 @@ int main (int argc, char* argv[]) {
     const auto& Ps_urtsm = urtsm.getCovariances();
 
     double t=0;
-    for (std::size_t i=0; i<Xs_ierts.size(); ++i, t+=dt) {
-      collector.collect("ERTS", Xs_simulation[i], Xs_erts[i], Ps_erts[i], t);
-      collector.collect("SERTS", Xs_simulation[i], Xs_serts[i], Ps_serts[i], t);
-      collector.collect("IERTS", Xs_simulation[i], Xs_ierts[i], Ps_ierts[i], t);
-      collector.collect("URTSM", Xs_simulation[i], Xs_urtsm[i], Ps_urtsm[i], t);
+    for (std::size_t i=0; i<Xs_erts.size(); ++i, t+=dt) {
+      collector.collect("ERTS", Xs_erts[i], Ps_erts[i], t);
+      collector.collect("SERTS", Xs_serts[i], Ps_serts[i], t);
+      collector.collect("IERTS", Xs_ierts[i], Ps_ierts[i], t);
+      collector.collect("URTSM", Xs_urtsm[i], Ps_urtsm[i], t);
     }
+  }
+
+  // print the trajectory
+  if (!quiet) {
+    KALMANIF_DEMO_PRINT_TRAJECTORY(collector);
   }
 
   // Generate some metrics and print them
