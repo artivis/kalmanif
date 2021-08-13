@@ -34,8 +34,12 @@ raise(Args&&... args) {
   throw E(std::forward<Args>(args)...);
 }
 
+template<typename T> void ignore_unused_variable(const T&) {}
+
 } // namespace detail
 } // namespace kalmanif
+
+#define KALMANIF_UNUSED_VARIABLE(x) kalmanif::detail::ignore_unused_variable(x)
 
 #ifdef NDEBUG
 # ifndef KALMANIF_NO_DEBUG

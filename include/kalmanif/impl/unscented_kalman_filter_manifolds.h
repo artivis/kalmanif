@@ -53,6 +53,7 @@ compute_sigma_weights(
 
 // Forward declaration
 template <typename Derived> struct SystemModelBase;
+template <typename Filter> struct RauchTungStriebelSmoother;
 
 template <typename StateType, Invariance Iv = Invariance::Right>
 struct UnscentedKalmanFilterManifolds
@@ -117,6 +118,14 @@ protected:
   using CovarianceBase::P;
 
   friend Base;
+  friend RauchTungStriebelSmoother<UnscentedKalmanFilterManifolds<StateType, Iv>>;
+
+  Jacobian<State, State> A_ = Jacobian<State, State>::Zero();
+
+  // @todo this definitely is an inelegant workaround
+  const Jacobian<State, State>& getA() const {
+    return A_;
+  }
 
   template <class SystemModelDerived, typename... Args>
   const State& propagate_impl(
@@ -213,6 +222,9 @@ protected:
       w_q.w0 * xi_mean2 * xi_mean2.transpose();
 
     enforceCovariance(P);
+
+    A_.noalias() = w_d.wj * xis_new * xis_new.transpose() +
+                   w_d.w0 * xi_mean * xi_mean.transpose();
 
     KALMANIF_ASSERT(
       isPositiveDefinite(P),

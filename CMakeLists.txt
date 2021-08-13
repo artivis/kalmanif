@@ -25,7 +25,6 @@ option(BUILD_TESTING "Build all tests." OFF)
 
 # SE2 demo/example produce unstable covariance matrix.
 # Until it is fixed, force disable kalmanif asserts.
-# set(KALMANIF_NO_DEBUG "Disable kalmanif asserts" ON)
 add_compile_definitions(KALMANIF_NO_DEBUG)
 
 ##################
@@ -94,7 +93,6 @@ export(PACKAGE ${PROJECT_NAME})
 
 ## Configuration
 
-#
 configure_package_config_file(
   "${PROJECT_SOURCE_DIR}/cmake/${PROJECT_NAME}Config.cmake.in"
   "${generated_dir}/${PROJECT_NAME}Config.cmake"

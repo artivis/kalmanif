@@ -5,6 +5,7 @@ namespace kalmanif {
 
 // Forward declaration
 template <typename Derived> struct SystemModelBase;
+template <typename Filter> struct RauchTungStriebelSmoother;
 
 template <typename StateType>
 struct SquareRootExtendedKalmanFilter
@@ -43,6 +44,13 @@ protected:
   using CovarianceSqrtBase::S;
 
   friend Base;
+  friend RauchTungStriebelSmoother<SquareRootExtendedKalmanFilter<StateType>>;
+
+  Jacobian<State, State> A_ = Jacobian<State, State>::Zero();
+
+  const Jacobian<State, State>& getA() const {
+    return A_;
+  }
 
   template <class SystemModelDerived, typename... Args>
   const State& propagate_impl(
@@ -65,6 +73,8 @@ protected:
     computePropagatedCovarianceSquareRoot<State, Control>(
       F, S, W, f.getCovarianceSquareRoot(), S
     );
+
+    A_ = F.transpose();
 
     KALMANIF_ASSERT(
       isCovariance(getCovariance()),

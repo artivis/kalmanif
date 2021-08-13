@@ -5,6 +5,7 @@ namespace kalmanif {
 
 // Forward declaration
 template <typename Derived> struct SystemModelBase;
+template <typename Filter> struct RauchTungStriebelSmoother;
 
 /**
  * @brief The ExtendedKalmanFilter
@@ -49,6 +50,14 @@ protected:
   using CovarianceBase::P;
 
   friend Base;
+  friend RauchTungStriebelSmoother<ExtendedKalmanFilter<StateType>>;
+
+  Jacobian<State, State> A_ = Jacobian<State, State>::Zero();
+
+  // @todo this definitely is an inelegant workaround
+  const Jacobian<State, State>& getA() const {
+    return A_;
+  }
 
   /**
    * @brief Perform filter propagation step using the input control \f$u\f$
@@ -79,8 +88,10 @@ protected:
     x = f(x, u, F, W, std::forward<Args>(args)...);
 
     // propagate covariance
-    P = F * P * F.transpose() +
-        W * f.getCovariance() * W.transpose();
+    P = F * P * F.transpose();
+    P.noalias() += W * f.getCovariance() * W.transpose();
+
+    A_ = F.transpose();
 
     // enforceCovariance(P);
 
