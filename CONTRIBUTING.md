@@ -53,13 +53,13 @@ First, let's install all the dependencies,
 Linux (Ubuntu and similar),
 
 ```bash
-apt install libeigen3-dev
+apt install build-essential cmake libeigen3-dev
 ```
 
 OS X,
 
 ```bash
-brew install eigen
+brew install cmake eigen
 ```
 
 Windows,
